@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+publish/
+*.zip
+**/include/WiFiSecrets.h

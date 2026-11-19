@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1320">
+  <title>SAKO Service Tool · v0.1</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">S</span><div><strong>SAKO Service</strong><small>Portable VFD Toolkit · v0.1</small></div></div>
+    <nav class="nav" aria-label="Main menu">
+      <button data-nav="dashboard" class="active"><span>◉</span> Dashboard</button>
+      <button data-nav="parameters"><span>☷</span> Parameters</button>
+      <button data-nav="library"><span>▦</span> Parameter Library</button>
+      <button data-nav="backup"><span>⇩</span> JSON Backup</button>
+      <button data-nav="settings"><span>⚙</span> Settings</button>
+    </nav>
+    <div class="sidebar-bottom"><span class="smallcaps">RELEASE STATUS</span><strong>Read-only firmware</strong><small>No RUN / STOP / Restore commands</small></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div><span class="eyebrow">ESP32-S3 · Modbus RTU</span><h1 id="page-title">Monitoring Dashboard</h1></div><div class="pill off" id="connection-pill"><span class="dot"></span><span id="connection-text">Checking</span></div></header>
+    <div class="banner warning" id="warn-banner">Connecting to device…</div>
+    <section class="page active" id="page-dashboard">
+      <div class="row statusbar">
+        <div class="status-panel"><div class="label">VFD Operation</div><div class="status-value"><span id="run-dot" class="status-icon">◯</span><strong id="run-status">—</strong></div></div>
+        <div class="status-panel"><div class="label">Rotation Direction</div><div class="status-value"><strong id="direction">—</strong></div></div>
+        <div class="status-panel"><div class="label">Slave / Protocol</div><div class="status-value mini"><strong id="status-slave">1</strong><span>·</span><span id="status-baud">9600 · 8N2</span></div></div>
+      </div>
+      <div class="metric-grid">
+        <article class="metric"><div class="label">Output Voltage</div><div class="measure"><strong id="m-voltage">—</strong><span>V</span></div><small>U0-03 · 0x7003</small></article>
+        <article class="metric"><div class="label">Output Current</div><div class="measure"><strong id="m-current">—</strong><span>A</span></div><small>U0-04 · 0x7004</small></article>
+        <article class="metric"><div class="label">Running Frequency</div><div class="measure"><strong id="m-frequency">—</strong><span>Hz</span></div><small>U0-00 · 0x7000</small></article>
+        <article class="metric"><div class="label">Motor Speed <em>Estimated</em></div><div class="measure"><strong id="m-rpm">—</strong><span>RPM</span></div><small>Using P1-04 &amp; P1-05</small></article>
+        <article class="metric"><div class="label">DC Bus Voltage</div><div class="measure"><strong id="m-bus">—</strong><span>V DC</span></div><small>U0-02 · 0x7002</small></article>
+        <article class="metric"><div class="label">Current Fault</div><div class="measure"><strong id="m-fault">—</strong><span id="fault-label"></span></div><small>Register 0x8000</small></article>
+      </div>
+      <div class="panel subtle"><h2>Connection &amp; Data Quality</h2><div class="flex-wrap"><span id="sampling" class="subdued">Polling ~1 sec</span><span id="data-age" class="subdued">Live data only</span><span class="subdued">Speed is estimated from nameplate settings, not measured shaft RPM</span></div></div>
+    </section>
+    <section class="page" id="page-parameters">
+      <div class="panel"><div class="panel-header"><div><h2>Parameter Manager</h2><p>Browse definitions and read one register at a time. No write functions.</p></div><span class="tag">Library draft</span></div>
+        <div class="filters"><input type="search" id="param-search" placeholder="Search code, address, description" aria-label="Search parameters"><select id="param-group" aria-label="Group"><option value="">All Groups</option></select><select id="param-access" aria-label="Access"><option value="">All Access Types</option><option>RW</option><option>RO</option><option>WO</option><option>Restricted</option><option>Unknown</option></select></div>
+        <div class="data-table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Access</th><th>Address</th><th></th></tr></thead><tbody id="param-tbody"></tbody></table></div>
+        <div class="pager"><button class="btn outline" id="prev-page">Previous</button><span id="param-pageinfo" class="subdued">—</span><button class="btn outline" id="next-page">Next</button></div>
+      </div>
+      <div class="panel" id="param-detail"><h2>Parameter Details</h2><p class="subdued">Select a parameter from the table.</p></div>
+    </section>
+    <section class="page" id="page-library">
+      <div class="panel"><div class="panel-header"><div><h2>Parameter Definition Library</h2><p>Definitions from SAKO manuals; read-only until verified on hardware.</p></div><span class="tag" id="lib-count">Loading</span></div>
+        <div class="grid-two"><div class="info"><span class="label">Library version</span><strong id="lib-version">—</strong></div><div class="info"><span class="label">Validation</span><strong>Engineering draft · hardware unverified</strong></div></div>
+        <div class="access-counters" id="access-counters"></div>
+        <p class="subdued">Default / Min / Max / Unit / Description come from the attached manuals where available. Unknown values remain blank. Use Parameters to inspect each entry.</p>
+        <a class="btn outline" href="/api/library" download="SKI780_parameter_library.json">Download full Definition JSON</a>
+      </div>
+      <div class="panel"><div class="panel-header"><div><h2>Parameter Profile Library</h2><p>Import / export saved JSON locally in this browser. Compare &amp; Restore are not yet included.</p></div></div>
+        <div class="flex-wrap"><label class="btn primary file-label" for="profile-import">Import JSON Profile<input type="file" id="profile-import" accept="application/json,.json" hidden></label><button class="btn outline" id="profile-export-all">Export Profiles</button></div>
+        <div id="profile-list" class="profile-list"><p class="subdued">No profiles imported.</p></div>
+        <p class="warning-note">Browser profiles are saved on this phone/PC only. Export JSON files to keep copies; private browsing may clear local data.</p>
+      </div>
+    </section>
+    <section class="page" id="page-backup">
+      <div class="panel"><div class="panel-header"><div><h2>JSON Backup</h2><p>Read RO/RW registers in sequence and save raw 16-bit values. Read-only operation.</p></div><span class="tag">No VFD writes</span></div>
+        <div class="backup-status"><span id="backup-message">Not started</span><strong id="backup-progress-label">0 / 0</strong></div>
+        <div class="progress-track"><div id="backup-progress" class="progress"></div></div>
+        <div class="grid-three"><div class="info"><span class="label">Succeeded</span><strong id="b-ok">0</strong></div><div class="info"><span class="label">Failed</span><strong id="b-fail">0</strong></div><div class="info"><span class="label">Not readable</span><strong id="b-skipped">0</strong></div></div>
+        <div class="flex-wrap" style="margin-top:18px"><button class="btn primary" id="backup-start">Start Full Backup</button><button class="btn outline" id="backup-cancel" disabled>Cancel</button><a class="btn outline disabled" id="backup-download" href="/api/backup/download" download="SAKO_SKI780_backup.json" aria-disabled="true">Download JSON</a></div>
+        <p class="warning-note">A backup may be partial if the device rejects or times out on some registers. The exported JSON includes the failed list and a complete flag; review it before reuse.</p>
+      </div>
+    </section>
+    <section class="page" id="page-settings">
+      <div class="panel"><h2>Hardware / Network</h2><div class="grid-two"><div class="info"><span class="label">Board</span><strong>Waveshare ESP32-S3-RS485-CAN</strong></div><div class="info"><span class="label">Connected Wi-Fi SSID</span><strong id="wifi-ssid">—</strong></div><div class="info"><span class="label">Web Address</span><strong id="wifi-ip">—</strong></div><div class="info"><span class="label">Wi-Fi Mode</span><strong id="wifi-mode">—</strong></div><div class="info"><span class="label">Firmware</span><strong id="firmware-version">0.1.2</strong></div></div></div>
+      <div class="panel"><h2>Local Modbus Port Settings</h2><p class="subdued">These settings change only the ESP32 serial port. They do not write any VFD parameters.</p>
+        <form id="settings-form"><div class="grid-three"><label class="field">Slave ID<input type="number" id="set-slave" min="1" max="247" value="1" required></label><label class="field">Baud rate<select id="set-baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option><option>4800</option><option>2400</option><option>1200</option><option>600</option><option>300</option></select></label><label class="field">Serial format<select id="set-format"><option>8N2</option><option>8N1</option><option>8E1</option><option>8O1</option></select></label></div><button class="btn primary" type="submit">Save ESP32 Modbus Settings</button></form>
+        <div id="settings-result" class="subdued" role="status"></div>
+      </div>
+      <div class="panel subtle"><h2>Protocol Verification</h2><div class="grid-two"><div class="info"><span class="label">Successful reads</span><strong id="read-ok">—</strong></div><div class="info"><span class="label">Failed reads</span><strong id="read-bad">—</strong></div></div><p id="modbus-error" class="subdued">—</p><p class="warning-note">SKI780 manual uses PD group; separate protocol PDF uses Fd. Check the physical inverter and select Standard Modbus to match this firmware (0x03 response format).</p></div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body></html>

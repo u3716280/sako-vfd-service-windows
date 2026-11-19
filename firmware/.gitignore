@@ -1,0 +1,6 @@
+.pio/
+.vscode/.browse.c_cpp.db*
+.DS_Store
+
+# Do not commit Wi-Fi passwords. ZIP contains a blank template.
+include/WiFiSecrets.h

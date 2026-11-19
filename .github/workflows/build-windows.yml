@@ -1,0 +1,64 @@
+name: Build SAKO VFD Windows Fluent App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore src/SakoVfdService.Windows/SakoVfdService.Windows.csproj -r win-x64
+
+      - name: Build Release
+        run: dotnet build src/SakoVfdService.Windows/SakoVfdService.Windows.csproj --configuration Release --no-restore -p:RuntimeIdentifier=win-x64
+
+      - name: Publish Windows x64 portable folder (self-contained)
+        run: >
+          dotnet publish src/SakoVfdService.Windows/SakoVfdService.Windows.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output publish/win-x64
+          -p:PublishSingleFile=false
+          -p:DebugType=None
+          -p:DebugSymbols=false
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $exe = 'publish/win-x64/SakoVfdService.exe'
+          if (!(Test-Path $exe)) { throw "Missing output: $exe" }
+          Write-Host "EXE found: $exe"
+          Get-Item $exe | Select-Object Name, Length
+
+      - name: Zip portable distribution
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'publish/win-x64/*' -DestinationPath 'SakoVfdService-win-x64-portable.zip' -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SakoVfdService-win-x64-portable
+          path: SakoVfdService-win-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 30
