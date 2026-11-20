@@ -10,7 +10,7 @@ using SakoVfdService.Windows.Models;
 namespace SakoVfdService.Windows.Services;
 
 /// <summary>
-/// Finds existing ESP32 firmware v0.1.2 without requiring an mDNS firmware patch.
+/// Finds existing and current SAKO firmware without auto-connecting.
 /// Bounded /24 scanning is intentional: never sweep arbitrary routed networks.
 /// </summary>
 public sealed class LanDiscoveryService : IDisposable
@@ -93,13 +93,20 @@ public sealed class LanDiscoveryService : IDisposable
             var root = json.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
             var hardware = GetText(root, "hardware");
-            var firmware = GetText(root, "firmware");
+            var productId = GetText(root, "product_id");
+            var firmware = GetText(root, "firmware_version");
+            if (string.IsNullOrWhiteSpace(firmware)) firmware = GetText(root, "firmware");
             // Do not identify unrelated HTTP servers as SAKO equipment.
-            if (!hardware.Contains("Waveshare ESP32-S3-RS485-CAN", StringComparison.OrdinalIgnoreCase) ||
-                !firmware.Contains("SAKO", StringComparison.OrdinalIgnoreCase))
+            var currentContract = productId.Equals("sako-ski780-service-tool", StringComparison.OrdinalIgnoreCase);
+            var legacyContract = hardware.Contains("Waveshare ESP32-S3-RS485-CAN", StringComparison.OrdinalIgnoreCase) &&
+                                 (GetText(root, "firmware").Contains("SAKO", StringComparison.OrdinalIgnoreCase) ||
+                                  firmware.Equals("0.1.2", StringComparison.OrdinalIgnoreCase));
+            if (!currentContract && !legacyContract)
                 return null;
             return new DeviceInfo(ip, hardware, firmware,
-                GetNumber(root, "slave"), GetNumber(root, "baud"), GetText(root, "network_mode"));
+                GetNumber(root, "slave"), GetNumber(root, "baud"), GetText(root, "network_mode"),
+                GetText(root, "device_id"), GetText(root, "device_name") is { Length: > 0 } name ? name : "SAKO Service Tool",
+                GetText(root, "api_version") is { Length: > 0 } api ? api : "legacy");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or
                                       OperationCanceledException or JsonException or IOException)

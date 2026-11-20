@@ -9,25 +9,26 @@ public static class AppPreferences
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SAKO-VFD-Service", "preferences.json");
 
-    public static string? LoadLastIp()
+    public sealed record Settings(string? LastIp = null, string Language = "th", string Theme = "light");
+
+    public static Settings Load()
     {
         try
         {
-            if (!File.Exists(FilePath)) return null;
-            using var json = JsonDocument.Parse(File.ReadAllText(FilePath));
-            if (json.RootElement.TryGetProperty("last_ip", out var last))
-                return last.GetString();
+            if (!File.Exists(FilePath)) return new();
+            return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
         }
         catch (Exception) { /* Missing/corrupt settings must not block startup. */ }
-        return null;
+        return new();
     }
 
-    public static void SaveLastIp(string ip)
+    public static void Save(Settings settings)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(new { last_ip = ip }));
+            File.WriteAllText(FilePath, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (IOException) { /* App still usable without persistence. */ }
         catch (UnauthorizedAccessException) { }
