@@ -39,5 +39,13 @@ assert 'board_build.filesystem = littlefs' in (root/'platformio.ini').read_text(
 assert 'factory' in (root/'partitions.csv').read_text() and 'littlefs' in (root/'partitions.csv').read_text()
 for endpoint in ['/api/device','/api/restore/parameter']:
     assert endpoint in web
+for endpoint in ['/api/control/status','/api/control/arm','/api/control/disarm','/api/control/run','/api/control/stop','/api/control/frequency']:
+    assert endpoint in web
+for safety_guard in ['ENABLE_REMOTE_CONTROL','START_MOTOR','stop_required_before_direction_change','vfd_stop_required_for_backup','COMMAND_DECEL_STOP','CONTROL_ARM_DURATION_MS']:
+    assert safety_guard in web or safety_guard in (root/'include/AppConfig.h').read_text()
+for control_asset in ['id="control-start"','id="control-stop"','id="control-hz"','data-direction="forward"','data-direction="reverse"']:
+    assert control_asset in html
+assert '/css/control.css' in web and (root/'data/css/control.css').is_file()
+assert 'displayParameterValue' in js and 'Value Meaning / Range' in js
 assert 'sako-ski780-service-tool' in (root/'include/AppConfig.h').read_text()
-print('PASS library 448, trusted index 445, API identity, backup, safe RW restore guards, LittleFS')
+print('PASS library 448, trusted index 445, API identity, backup, safe RW restore, guarded motor/frequency control, LittleFS')

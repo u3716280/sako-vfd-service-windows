@@ -1,8 +1,21 @@
-# วิธีติดตั้งฉบับย่อ — SAKO SKI780 ESP32 Service Tool v0.2.0
+# วิธีติดตั้งฉบับย่อ — SAKO SKI780 ESP32 Service Tool v0.3.0
 
 **บอร์ดที่ใช้:** Waveshare ESP32-S3-RS485-CAN รุ่นเสาอากาศในตัว (SKU 32154)  
 **โปรแกรมพัฒนา:** VS Code + PlatformIO / Arduino C++  
-**วัตถุประสงค์:** Monitoring / Parameter Library / JSON Backup และ Safe Restore ค่า RW จาก Windows v0.2 ผ่าน RS-485 โดยไม่มีคำสั่ง RUN/STOP มอเตอร์
+**วัตถุประสงค์:** Monitoring / Parameter Library / JSON Backup / Safe Restore ค่า RW และการควบคุม START, STOP, FORWARD, REVERSE และ Hz แบบมี Safety Guard ผ่าน RS-485
+
+## การควบคุมมอเตอร์ v0.3.0
+
+- ตั้ง VFD `P0-02 = 2` เพื่อรับคำสั่งเดิน/หยุดจาก Communication
+- ตั้ง VFD `P0-03 = 9` เพื่อรับค่าความถี่จาก Communication
+- กด **Enable Remote Control** ก่อนใช้งาน สิทธิ์หมดอายุอัตโนมัติใน 10 นาทีและถูกปิดทุกครั้งที่ ESP32 เปิดเครื่องใหม่
+- FORWARD/REVERSE เป็นการเลือกทิศก่อน คำสั่งจริงจะถูกส่งเมื่อกด START และยืนยัน
+- ห้ามกลับทิศขณะ VFD รายงาน RUN ต้องกด STOP และรอ `0x3000 = 3`
+- STOP ใช้ Deceleration Stop (`0x2000 = 6`) ตามเวลาลดรอบที่ตั้งใน VFD
+- STOP ยังคงกดได้เมื่อสิทธิ์ 10 นาทีหมดอายุ และจะยกเลิก Backup ที่กำลังทำเพื่อให้คำสั่งหยุดใช้ RS-485 ก่อน
+- เริ่ม Backup ได้เฉพาะเมื่อ VFD ยืนยันสถานะ STOP
+- ค่า Hz ถูกแปลงเป็นเปอร์เซ็นต์ `0..10000` ของ P0-10 แล้วเขียนที่ `0x1000` และจำกัดด้วย P0-14/P0-12/P0-10
+- Web UI ไม่ใช่วงจร Emergency Stop ต้องมีอุปกรณ์หยุดฉุกเฉินจริงที่เครื่องจักร
 
 ## ติดตั้งลงบอร์ด
 

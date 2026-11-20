@@ -1,8 +1,8 @@
-# SAKO SKI780 Portable VFD Service Tool — v0.2 Windows Integration
+# SAKO SKI780 Portable VFD Service Tool — v0.3 Guarded Motor Control
 
 **Hardware:** Waveshare **ESP32-S3-RS485-CAN**, onboard antenna, SKU 32154  
 **Development:** VS Code + PlatformIO / Arduino C++  
-**Purpose:** Temporary field-service tool for monitoring, Parameter Library browsing, JSON backup, and guarded RW-only restore from the Windows v0.2 application over RS-485 Modbus RTU. It does not expose motor RUN/STOP control.
+**Purpose:** Temporary field-service tool for monitoring, Parameter Library browsing, JSON backup, guarded RW-only restore, and time-limited START/STOP/direction/frequency control over RS-485 Modbus RTU.
 
 ## 1. What's included
 
@@ -15,7 +15,11 @@
 | Backup | Sequential read-only Modbus backup with per-register success/failure, JSON download |
 | Settings | ESP32's own baud, serial format, and slave address stored in Preferences |
 
-**Excluded:** Input Voltage AC (no verified native register) and motor RUN/STOP control. Compare runs in the Windows application. The browser UI remains monitoring/backup oriented.
+**Excluded:** Input Voltage AC (no verified native register). Compare runs in the Windows application.
+
+## Guarded motor control (v0.3.0)
+
+Remote control is disabled at every boot and must be armed from the web UI for a 10-minute window. Arming is rejected unless P0-02 reads 2 (communication command source) and P0-03 reads 9 (communication frequency source). START requires a separate confirmation. A direction change is rejected while the drive reports Forward or Reverse; stop and wait for register 0x3000 to report 3 first. STOP remains available after the arm window expires, cancels an active backup to gain bus priority, and sends deceleration stop (`0x2000 = 6`). Backups may start only while STOP is confirmed. Frequency uses the communication setting register 0x1000, where 0..10000 represents 0..100% of P0-10, and is bounded by P0-14, P0-12 and P0-10. This HTTP interface is not an emergency-stop circuit and must remain on a trusted isolated LAN.
 
 ## 2. First setup / PlatformIO flash
 

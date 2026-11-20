@@ -71,7 +71,7 @@ static void serviceNetwork() {
 void setup() {
   Serial.begin(115200);
   delay(400);
-  Serial.println("\nSAKO SKI780 Portable Service Tool v0.2.0 | SAFE RW RESTORE");
+  Serial.println("\nSAKO SKI780 Portable Service Tool v0.3.0 | GUARDED MOTOR CONTROL");
   // Never format silently: formatting could erase the definition library.
   if(!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
     Serial.println("ERROR: LittleFS missing. Upload filesystem image from PlatformIO.");

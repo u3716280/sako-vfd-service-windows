@@ -14,6 +14,10 @@ private:
   ModbusRTU& mb_;
   VfdService& vfd_;
   BackupService& backup_;
+  bool controlArmed_{false};
+  uint32_t controlArmedUntilMs_{0};
+  bool controlArmed();
+  void disarmControl();
   void sendJSON(int status, const String& json);
   void serveFile(const char* path, const char* mime);
   void initRoutes();

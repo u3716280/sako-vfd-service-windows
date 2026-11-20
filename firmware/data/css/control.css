@@ -1,0 +1,73 @@
+.btn.success {
+  background: #16865f;
+  color: #fff;
+}
+.btn.success:hover { background: #20a878; }
+.btn.danger {
+  background: #bd4050;
+  color: #fff;
+}
+.btn.danger:hover { background: #dc5363; }
+.control-panel { border-color: #3b5876; }
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.control-block {
+  background: #0f1d2e;
+  border: 1px solid #2b4059;
+  border-radius: 9px;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 11px;
+}
+.control-block small {
+  color: #91a6be;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.direction-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.direction-picker .active {
+  background: #2a5c82;
+  border-color: #68b9ed;
+  color: #fff;
+}
+.frequency-entry {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.frequency-entry span {
+  color: #9db1c9;
+  font-size: 12px;
+}
+.motor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.motor-button {
+  min-width: 130px;
+  font-size: 15px;
+  padding: 13px 22px;
+}
+@media (max-width: 1000px) {
+  .control-grid { grid-template-columns: 1fr 1fr; }
+  .control-block:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .control-grid { grid-template-columns: 1fr; }
+  .control-block:last-child { grid-column: auto; }
+  .motor-button { flex: 1; }
+  .frequency-entry { grid-template-columns: minmax(80px, 1fr) auto; }
+  .frequency-entry .btn { grid-column: 1 / -1; }
+}

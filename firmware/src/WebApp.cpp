@@ -4,6 +4,45 @@
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <math.h>
+
+namespace {
+constexpr uint16_t REG_COMMAND_SOURCE = 0xF002;
+constexpr uint16_t REG_FREQUENCY_SOURCE = 0xF003;
+constexpr uint16_t REG_MAX_FREQUENCY = 0xF00A;
+constexpr uint16_t REG_UPPER_FREQUENCY = 0xF00C;
+constexpr uint16_t REG_LOWER_FREQUENCY = 0xF00E;
+constexpr uint16_t REG_COMMUNICATION_SET = 0x1000;
+constexpr uint16_t REG_RUN_COMMAND = 0x2000;
+constexpr uint16_t REG_RUN_STATE = 0x3000;
+constexpr uint16_t COMMAND_FORWARD = 1;
+constexpr uint16_t COMMAND_REVERSE = 2;
+constexpr uint16_t COMMAND_DECEL_STOP = 6;
+
+struct ControlConfig {
+  uint16_t commandSource{0};
+  uint16_t frequencySource{0};
+  uint16_t runState{0};
+  float maximumHz{0};
+  float upperHz{0};
+  float lowerHz{0};
+};
+
+bool readControlConfig(ModbusRTU& mb, ControlConfig& config) {
+  uint16_t maximumRaw=0, upperRaw=0, lowerRaw=0;
+  return mb.readRegister(REG_COMMAND_SOURCE,config.commandSource) &&
+         mb.readRegister(REG_FREQUENCY_SOURCE,config.frequencySource) &&
+         mb.readRegister(REG_MAX_FREQUENCY,maximumRaw) &&
+         mb.readRegister(REG_UPPER_FREQUENCY,upperRaw) &&
+         mb.readRegister(REG_LOWER_FREQUENCY,lowerRaw) &&
+         mb.readRegister(REG_RUN_STATE,config.runState) &&
+         ((config.maximumHz=maximumRaw*0.01f),
+          (config.upperHz=upperRaw*0.01f),
+          (config.lowerHz=lowerRaw*0.01f), true);
+}
+
+String hzJson(float hz) { return String(hz,2); }
+}
 
 static String jsonEscape(const String& value) {
   String out;out.reserve(value.length()+8);
@@ -34,10 +73,16 @@ void WebApp::serveFile(const char* path,const char* mime) {
 }
 void WebApp::begin() {initRoutes();server_.begin();}
 void WebApp::tick() {server_.handleClient();}
+bool WebApp::controlArmed() {
+  if(controlArmed_ && (int32_t)(controlArmedUntilMs_-millis())<=0) disarmControl();
+  return controlArmed_;
+}
+void WebApp::disarmControl() {controlArmed_=false;controlArmedUntilMs_=0;}
 
 void WebApp::initRoutes() {
   server_.on("/",HTTP_GET,[&](){serveFile("/index.html","text/html; charset=utf-8");});
   server_.on("/css/style.css",HTTP_GET,[&](){serveFile("/css/style.css","text/css; charset=utf-8");});
+  server_.on("/css/control.css",HTTP_GET,[&](){serveFile("/css/control.css","text/css; charset=utf-8");});
   server_.on("/js/app.js",HTTP_GET,[&](){serveFile("/js/app.js","application/javascript; charset=utf-8");});
   server_.on("/api/library",HTTP_GET,[&](){serveFile("/library/ski780_parameters.json","application/json; charset=utf-8");});
   server_.on("/api/monitor",HTTP_GET,[&](){sendJSON(200,vfd_.toJson(backup_.active()));});
@@ -69,8 +114,80 @@ void WebApp::initRoutes() {
     s+=",\"ap_ssid\":\""+(apOnline ? String(AP_SSID) : "")+"\",\"successful_reads\":"+String(mb_.successfulReads());
     s+=",\"failed_reads\":"+String(mb_.failedReads())+",\"successful_writes\":"+String(mb_.successfulWrites());
     s+=",\"failed_writes\":"+String(mb_.failedWrites())+",\"last_modbus_error\":\""+jsonEscape(mb_.lastError())+"\"";
-    s+=",\"capabilities\":[\"backup\",\"safe_restore_rw\",\"device_name\",\"serial_settings\"]}";
+    s+=",\"capabilities\":[\"backup\",\"safe_restore_rw\",\"device_name\",\"serial_settings\",\"motor_control\",\"frequency_control\"]}";
     sendJSON(200,s);
+  });
+  server_.on("/api/control/status",HTTP_GET,[&](){
+    if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    ControlConfig config;
+    if(!readControlConfig(mb_,config)) {sendJSON(502,"{\"error\":\"control_preflight_read_failed\",\"detail\":\""+jsonEscape(mb_.lastError())+"\"}");return;}
+    const bool armed=controlArmed();
+    const uint32_t remaining=armed?(controlArmedUntilMs_-millis())/1000UL:0;
+    String s="{\"armed\":"+String(armed?"true":"false")+",\"armed_remaining_seconds\":"+String(remaining);
+    s+=",\"command_source\":"+String(config.commandSource)+",\"frequency_source\":"+String(config.frequencySource);
+    s+=",\"command_source_ready\":"+String(config.commandSource==2?"true":"false");
+    s+=",\"frequency_source_ready\":"+String(config.frequencySource==9?"true":"false");
+    s+=",\"run_state\":"+String(config.runState)+",\"maximum_hz\":"+hzJson(config.maximumHz);
+    s+=",\"upper_hz\":"+hzJson(config.upperHz)+",\"lower_hz\":"+hzJson(config.lowerHz)+"}";
+    sendJSON(200,s);
+  });
+  server_.on("/api/control/arm",HTTP_POST,[&](){
+    if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    if(server_.arg("confirm")!="ENABLE_REMOTE_CONTROL") {sendJSON(412,"{\"error\":\"confirmation_required\"}");return;}
+    ControlConfig config;
+    if(!readControlConfig(mb_,config)) {sendJSON(502,"{\"error\":\"control_preflight_read_failed\"}");return;}
+    if(config.commandSource!=2||config.frequencySource!=9) {
+      sendJSON(409,"{\"error\":\"communication_control_not_configured\",\"required\":\"P0-02=2 and P0-03=9\",\"command_source\":"+String(config.commandSource)+",\"frequency_source\":"+String(config.frequencySource)+"}");return;
+    }
+    controlArmed_=true;controlArmedUntilMs_=millis()+CONTROL_ARM_DURATION_MS;
+    sendJSON(200,"{\"success\":true,\"armed\":true,\"expires_in_seconds\":600}");
+  });
+  server_.on("/api/control/disarm",HTTP_POST,[&](){
+    disarmControl();sendJSON(200,"{\"success\":true,\"armed\":false}");
+  });
+  server_.on("/api/control/run",HTTP_POST,[&](){
+    if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    if(!controlArmed()) {sendJSON(423,"{\"error\":\"remote_control_not_armed\"}");return;}
+    if(server_.arg("confirm")!="START_MOTOR") {sendJSON(412,"{\"error\":\"start_confirmation_required\"}");return;}
+    const String direction=server_.arg("direction");
+    const uint16_t command=direction=="forward"?COMMAND_FORWARD:direction=="reverse"?COMMAND_REVERSE:0;
+    if(command==0) {sendJSON(422,"{\"error\":\"invalid_direction\"}");return;}
+    ControlConfig config;
+    if(!readControlConfig(mb_,config)) {sendJSON(502,"{\"error\":\"control_preflight_read_failed\"}");return;}
+    if(config.commandSource!=2||config.frequencySource!=9) {disarmControl();sendJSON(409,"{\"error\":\"communication_control_not_configured\"}");return;}
+    if((config.runState==1||config.runState==2)&&config.runState!=command) {
+      sendJSON(409,"{\"error\":\"stop_required_before_direction_change\"}");return;
+    }
+    if(config.runState!=3&&config.runState!=command) {sendJSON(409,"{\"error\":\"vfd_stop_not_confirmed\"}");return;}
+    if(!mb_.writeRegister(REG_RUN_COMMAND,command)) {sendJSON(502,"{\"error\":\"run_command_failed\",\"detail\":\""+jsonEscape(mb_.lastError())+"\"}");return;}
+    sendJSON(200,"{\"success\":true,\"command\":\""+direction+"\",\"verification\":\"monitor_register_0x3000\"}");
+  });
+  server_.on("/api/control/stop",HTTP_POST,[&](){
+    // STOP keeps bus priority even after the arm window expires.
+    if(backup_.active()) backup_.cancel();
+    uint16_t commandSource=0;
+    if(!mb_.readRegister(REG_COMMAND_SOURCE,commandSource)) {sendJSON(502,"{\"error\":\"command_source_read_failed\"}");return;}
+    if(commandSource!=2) {disarmControl();sendJSON(409,"{\"error\":\"communication_command_not_configured\"}");return;}
+    if(!mb_.writeRegister(REG_RUN_COMMAND,COMMAND_DECEL_STOP)) {sendJSON(502,"{\"error\":\"stop_command_failed\",\"detail\":\""+jsonEscape(mb_.lastError())+"\"}");return;}
+    sendJSON(200,"{\"success\":true,\"command\":\"deceleration_stop\",\"verification\":\"monitor_register_0x3000\"}");
+  });
+  server_.on("/api/control/frequency",HTTP_POST,[&](){
+    if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    if(!controlArmed()) {sendJSON(423,"{\"error\":\"remote_control_not_armed\"}");return;}
+    const String hzText=server_.arg("hz");char* end=nullptr;const float requested=strtof(hzText.c_str(),&end);
+    if(hzText.length()<1||!end||*end!='\0'||!isfinite(requested)) {sendJSON(422,"{\"error\":\"invalid_frequency\"}");return;}
+    ControlConfig config;
+    if(!readControlConfig(mb_,config)) {sendJSON(502,"{\"error\":\"control_preflight_read_failed\"}");return;}
+    if(config.commandSource!=2||config.frequencySource!=9) {disarmControl();sendJSON(409,"{\"error\":\"communication_control_not_configured\"}");return;}
+    const float allowedUpper=min(config.maximumHz,config.upperHz);
+    if(config.maximumHz<=0||allowedUpper<config.lowerHz||requested<config.lowerHz||requested>allowedUpper) {
+      sendJSON(422,"{\"error\":\"frequency_out_of_range\",\"minimum_hz\":"+hzJson(config.lowerHz)+",\"maximum_hz\":"+hzJson(allowedUpper)+"}");return;
+    }
+    const uint16_t raw=(uint16_t)lroundf((requested/config.maximumHz)*10000.0f);
+    if(raw>10000||!mb_.writeRegister(REG_COMMUNICATION_SET,raw)) {
+      sendJSON(502,"{\"error\":\"frequency_command_failed\",\"detail\":\""+jsonEscape(mb_.lastError())+"\"}");return;
+    }
+    sendJSON(200,"{\"success\":true,\"requested_hz\":"+hzJson(requested)+",\"communication_raw\":"+String(raw)+",\"maximum_frequency_hz\":"+hzJson(config.maximumHz)+"}");
   });
   server_.on("/api/parameter",HTTP_GET,[&](){
     if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_busy\"}");return;}
@@ -86,6 +203,8 @@ void WebApp::initRoutes() {
   server_.on("/api/backup/status",HTTP_GET,[&](){sendJSON(200,backup_.statusJson());});
   server_.on("/api/backup/start",HTTP_POST,[&](){
     if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    uint16_t runState=0;
+    if(!mb_.readRegister(REG_RUN_STATE,runState)||runState!=3) {sendJSON(409,"{\"error\":\"vfd_stop_required_for_backup\"}");return;}
     String clientTime=server_.arg("time");
     if(!backup_.start(clientTime)) {sendJSON(507,"{\"error\":\"storage_unavailable\"}");return;}
     sendJSON(202,backup_.statusJson());

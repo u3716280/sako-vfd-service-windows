@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1320">
-  <title>SAKO Service Tool · v0.1</title>
+  <title>SAKO Service Tool · v0.3</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/control.css">
   <script src="/js/app.js" defer></script>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><span class="logo">S</span><div><strong>SAKO Service</strong><small>Portable VFD Toolkit · v0.1</small></div></div>
+    <div class="brand"><span class="logo">S</span><div><strong>SAKO Service</strong><small>Portable VFD Toolkit · v0.3</small></div></div>
     <nav class="nav" aria-label="Main menu">
       <button data-nav="dashboard" class="active"><span>◉</span> Dashboard</button>
       <button data-nav="parameters"><span>☷</span> Parameters</button>
@@ -19,7 +20,7 @@
       <button data-nav="backup"><span>⇩</span> JSON Backup</button>
       <button data-nav="settings"><span>⚙</span> Settings</button>
     </nav>
-    <div class="sidebar-bottom"><span class="smallcaps">RELEASE STATUS</span><strong>Read-only firmware</strong><small>No RUN / STOP / Restore commands</small></div>
+    <div class="sidebar-bottom"><span class="smallcaps">RELEASE STATUS</span><strong>Guarded control firmware</strong><small>Remote control expires after 10 minutes</small></div>
   </aside>
   <main class="main">
     <header class="topbar"><div><span class="eyebrow">ESP32-S3 · Modbus RTU</span><h1 id="page-title">Monitoring Dashboard</h1></div><div class="pill off" id="connection-pill"><span class="dot"></span><span id="connection-text">Checking</span></div></header>
@@ -29,6 +30,16 @@
         <div class="status-panel"><div class="label">VFD Operation</div><div class="status-value"><span id="run-dot" class="status-icon">◯</span><strong id="run-status">—</strong></div></div>
         <div class="status-panel"><div class="label">Rotation Direction</div><div class="status-value"><strong id="direction">—</strong></div></div>
         <div class="status-panel"><div class="label">Slave / Protocol</div><div class="status-value mini"><strong id="status-slave">1</strong><span>·</span><span id="status-baud">9600 · 8N2</span></div></div>
+      </div>
+      <div class="panel control-panel">
+        <div class="panel-header"><div><h2>Motor Control / ควบคุมมอเตอร์</h2><p>Requires P0-02 = 2 (Communication command) and P0-03 = 9 (Communication frequency).</p></div><span class="tag" id="control-arm-state">LOCKED</span></div>
+        <div class="control-grid">
+          <div class="control-block"><span class="label">Remote Control</span><div class="flex-wrap"><button class="btn primary" id="control-arm">Enable for 10 minutes</button><button class="btn outline" id="control-disarm" disabled>Disable</button></div><small id="control-config">Checking VFD configuration…</small></div>
+          <div class="control-block"><span class="label">Direction / ทิศทาง</span><div class="direction-picker"><button class="btn outline active" data-direction="forward">FORWARD</button><button class="btn outline" data-direction="reverse">REVERSE</button></div><small>Selection only; motor starts after pressing START.</small></div>
+          <div class="control-block"><label class="label" for="control-hz">Target Frequency / ความถี่</label><div class="frequency-entry"><input id="control-hz" type="number" inputmode="decimal" min="0" max="500" step="0.01" value="50.00"><span>Hz</span><button class="btn outline" id="control-set-hz" disabled>Set Hz</button></div><small id="control-range">Allowed range: —</small></div>
+        </div>
+        <div class="motor-actions"><button class="btn success motor-button" id="control-start" disabled>START</button><button class="btn danger motor-button" id="control-stop" disabled>STOP</button><strong id="control-result" class="subdued">Remote control is locked.</strong></div>
+        <p class="warning-note">START always asks for confirmation. Direction cannot be reversed while running. STOP uses the VFD deceleration time. This web page is not an emergency-stop circuit.</p>
       </div>
       <div class="metric-grid">
         <article class="metric"><div class="label">Output Voltage</div><div class="measure"><strong id="m-voltage">—</strong><span>V</span></div><small>U0-03 · 0x7003</small></article>
@@ -41,7 +52,7 @@
       <div class="panel subtle"><h2>Connection &amp; Data Quality</h2><div class="flex-wrap"><span id="sampling" class="subdued">Polling ~1 sec</span><span id="data-age" class="subdued">Live data only</span><span class="subdued">Speed is estimated from nameplate settings, not measured shaft RPM</span></div></div>
     </section>
     <section class="page" id="page-parameters">
-      <div class="panel"><div class="panel-header"><div><h2>Parameter Manager</h2><p>Browse definitions and read one register at a time. No write functions.</p></div><span class="tag">Library draft</span></div>
+      <div class="panel"><div class="panel-header"><div><h2>Parameter Manager</h2><p>Select a parameter to see its description, value meaning, limits and current value.</p></div><span class="tag">Library draft</span></div>
         <div class="filters"><input type="search" id="param-search" placeholder="Search code, address, description" aria-label="Search parameters"><select id="param-group" aria-label="Group"><option value="">All Groups</option></select><select id="param-access" aria-label="Access"><option value="">All Access Types</option><option>RW</option><option>RO</option><option>WO</option><option>Restricted</option><option>Unknown</option></select></div>
         <div class="data-table-wrap"><table class="data-table"><thead><tr><th>Code</th><th>Name</th><th>Access</th><th>Address</th><th></th></tr></thead><tbody id="param-tbody"></tbody></table></div>
         <div class="pager"><button class="btn outline" id="prev-page">Previous</button><span id="param-pageinfo" class="subdued">—</span><button class="btn outline" id="next-page">Next</button></div>
@@ -71,7 +82,7 @@
       </div>
     </section>
     <section class="page" id="page-settings">
-      <div class="panel"><h2>Hardware / Network</h2><div class="grid-two"><div class="info"><span class="label">Board</span><strong>Waveshare ESP32-S3-RS485-CAN</strong></div><div class="info"><span class="label">Connected Wi-Fi SSID</span><strong id="wifi-ssid">—</strong></div><div class="info"><span class="label">Web Address</span><strong id="wifi-ip">—</strong></div><div class="info"><span class="label">Wi-Fi Mode</span><strong id="wifi-mode">—</strong></div><div class="info"><span class="label">Firmware</span><strong id="firmware-version">0.1.2</strong></div></div></div>
+      <div class="panel"><h2>Hardware / Network</h2><div class="grid-two"><div class="info"><span class="label">Board</span><strong>Waveshare ESP32-S3-RS485-CAN</strong></div><div class="info"><span class="label">Connected Wi-Fi SSID</span><strong id="wifi-ssid">—</strong></div><div class="info"><span class="label">Web Address</span><strong id="wifi-ip">—</strong></div><div class="info"><span class="label">Wi-Fi Mode</span><strong id="wifi-mode">—</strong></div><div class="info"><span class="label">Firmware</span><strong id="firmware-version">0.3.0</strong></div></div></div>
       <div class="panel"><h2>Local Modbus Port Settings</h2><p class="subdued">These settings change only the ESP32 serial port. They do not write any VFD parameters.</p>
         <form id="settings-form"><div class="grid-three"><label class="field">Slave ID<input type="number" id="set-slave" min="1" max="247" value="1" required></label><label class="field">Baud rate<select id="set-baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option><option>4800</option><option>2400</option><option>1200</option><option>600</option><option>300</option></select></label><label class="field">Serial format<select id="set-format"><option>8N2</option><option>8N1</option><option>8E1</option><option>8O1</option></select></label></div><button class="btn primary" type="submit">Save ESP32 Modbus Settings</button></form>
         <div id="settings-result" class="subdued" role="status"></div>
