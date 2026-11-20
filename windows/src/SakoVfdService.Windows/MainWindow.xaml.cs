@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Windows;
@@ -12,6 +14,10 @@ using Microsoft.Web.WebView2.Core;
 using SakoVfdService.Windows.Models;
 using SakoVfdService.Windows.Services;
 using Wpf.Ui.Controls;
+using MessageBox = System.Windows.MessageBox;
+using MessageBoxButton = System.Windows.MessageBoxButton;
+using MessageBoxImage = System.Windows.MessageBoxImage;
+using MessageBoxResult = System.Windows.MessageBoxResult;
 
 namespace SakoVfdService.Windows;
 
@@ -147,7 +153,7 @@ public partial class MainWindow : FluentWindow
             while (true)
             {
                 await Task.Delay(700, _backupCancellation.Token); using var status = await _device.GetBackupStatusAsync(_connectedIp, _backupCancellation.Token); var r = status.RootElement;
-                var total = GetInt(r,"total"), done = GetInt(r,"processed"); BackupProgress.Maximum = Math.Max(1,total); BackupProgress.Value = done;
+                int total = GetInt(r,"total"), done = GetInt(r,"processed"); BackupProgress.Maximum = Math.Max(1,total); BackupProgress.Value = done;
                 BackupStatusText.Text = $"{GetText(r,"stage")} · {done}/{total} · OK {GetInt(r,"success")} · Failed {GetInt(r,"failed")}";
                 if (!GetBool(r,"active")) { BackupDownloadButton.IsEnabled = GetBool(r,"ready"); break; }
             }

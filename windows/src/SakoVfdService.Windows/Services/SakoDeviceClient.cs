@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 
@@ -14,10 +15,10 @@ public sealed class SakoDeviceClient : IDisposable
         await GetJsonAsync($"http://{ip}/api/backup/status", token);
 
     public async Task<JsonDocument> StartBackupAsync(string ip, CancellationToken token = default) =>
-        await PostFormAsync($"http://{ip}/api/backup/start?time={Uri.EscapeDataString(DateTimeOffset.Now.ToString("O"))}", [], token);
+        await PostFormAsync($"http://{ip}/api/backup/start?time={Uri.EscapeDataString(DateTimeOffset.Now.ToString("O"))}", new Dictionary<string,string>(), token);
 
     public async Task<JsonDocument> CancelBackupAsync(string ip, CancellationToken token = default) =>
-        await PostFormAsync($"http://{ip}/api/backup/cancel", [], token);
+        await PostFormAsync($"http://{ip}/api/backup/cancel", new Dictionary<string,string>(), token);
 
     public async Task SaveSerialSettingsAsync(string ip, int slave, int baud, string format, CancellationToken token = default)
     {
