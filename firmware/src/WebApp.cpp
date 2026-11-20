@@ -5,6 +5,22 @@
 #include <Preferences.h>
 #include <WiFi.h>
 
+static String jsonEscape(const String& value) {
+  String out;out.reserve(value.length()+8);
+  for(size_t i=0;i<value.length();++i) {
+    const char c=value.charAt(i);
+    if(c=='"'||c=='\\') {out+='\\';out+=c;}
+    else if((uint8_t)c>=32) out+=c;
+  }
+  return out;
+}
+
+static String deviceId() {
+  String suffix=String((uint32_t)(ESP.getEfuseMac()&0xFFFFFFFFULL),HEX);suffix.toUpperCase();
+  while(suffix.length()<8) suffix="0"+suffix;
+  return "ESP32-"+suffix;
+}
+
 void WebApp::sendJSON(int status,const String& json) {
   server_.sendHeader("Cache-Control","no-store, max-age=0");
   server_.sendHeader("X-Content-Type-Options","nosniff");
@@ -26,7 +42,12 @@ void WebApp::initRoutes() {
   server_.on("/api/library",HTTP_GET,[&](){serveFile("/library/ski780_parameters.json","application/json; charset=utf-8");});
   server_.on("/api/monitor",HTTP_GET,[&](){sendJSON(200,vfd_.toJson(backup_.active()));});
   server_.on("/api/status",HTTP_GET,[&](){
-    String s="{\"firmware\":\""+String(FW_VERSION)+"\",\"hardware\":\"Waveshare ESP32-S3-RS485-CAN\",";
+    Preferences devicePref;devicePref.begin("sako780",true);
+    const String deviceName=devicePref.getString("device_name","SAKO Service Tool");devicePref.end();
+    String s="{\"product_id\":\""+String(PRODUCT_ID)+"\",\"api_version\":\""+String(API_VERSION)+"\",";
+    s+="\"firmware_version\":\""+String(FW_VERSION)+"\",\"firmware\":\"SAKO SKI780 "+String(FW_VERSION)+"\",";
+    s+="\"device_id\":\""+deviceId()+"\",\"device_name\":\""+jsonEscape(deviceName)+"\",";
+    s+="\"hardware\":\"Waveshare ESP32-S3-RS485-CAN\",";
     s+="\"slave\":"+String(mb_.slave())+",\"baud\":"+String(mb_.baud());
     const bool staOnline = WiFi.status() == WL_CONNECTED;
     const bool apOnline = (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA);
@@ -46,7 +67,9 @@ void WebApp::initRoutes() {
     s+=",\"network_ssid\":\""+encodedSsid+"\"";
     s+=",\"ap_ip\":\""+(apOnline ? WiFi.softAPIP().toString() : "")+"\"";
     s+=",\"ap_ssid\":\""+(apOnline ? String(AP_SSID) : "")+"\",\"successful_reads\":"+String(mb_.successfulReads());
-    s+=",\"failed_reads\":"+String(mb_.failedReads())+",\"last_modbus_error\":\""+mb_.lastError()+"\"}";
+    s+=",\"failed_reads\":"+String(mb_.failedReads())+",\"successful_writes\":"+String(mb_.successfulWrites());
+    s+=",\"failed_writes\":"+String(mb_.failedWrites())+",\"last_modbus_error\":\""+jsonEscape(mb_.lastError())+"\"";
+    s+=",\"capabilities\":[\"backup\",\"safe_restore_rw\",\"device_name\",\"serial_settings\"]}";
     sendJSON(200,s);
   });
   server_.on("/api/parameter",HTTP_GET,[&](){
@@ -85,6 +108,50 @@ void WebApp::initRoutes() {
     pref.putUInt("baud",baud);pref.putUChar("slave",(uint8_t)slave);pref.putString("format",fmt);pref.end();
     mb_.begin(baud,fmt,(uint8_t)slave);
     sendJSON(200,"{\"success\":true,\"note\":\"ESP32_port_updated_only_no_VFD_settings_written\"}");
+  });
+  server_.on("/api/device",HTTP_POST,[&](){
+    String name=server_.arg("name");name.trim();
+    if(name.length()<1||name.length()>96) {sendJSON(422,"{\"error\":\"invalid_device_name\"}");return;}
+    String safe;
+    for(size_t i=0;i<name.length();++i) {
+      const char c=name.charAt(i);
+      if((uint8_t)c>=32&&c!='"'&&c!='\\') safe+=c;
+    }
+    if(safe.length()<1) {sendJSON(422,"{\"error\":\"invalid_device_name\"}");return;}
+    Preferences pref;pref.begin("sako780",false);pref.putString("device_name",safe);pref.end();
+    sendJSON(200,"{\"success\":true,\"device_name\":\""+jsonEscape(safe)+"\"}");
+  });
+  server_.on("/api/restore/parameter",HTTP_POST,[&](){
+    if(backup_.active()) {sendJSON(409,"{\"error\":\"backup_running\"}");return;}
+    if(server_.arg("confirm")!="RESTORE_RW") {sendJSON(412,"{\"error\":\"confirmation_required\"}");return;}
+    const String code=server_.arg("code"),rawText=server_.arg("raw_value");
+    const auto* parameter=findParameter(code);
+    if(!parameter||parameter->access!=ACCESS_RW||code.startsWith("REG_")) {
+      sendJSON(403,"{\"error\":\"not_trusted_rw_parameter\"}");return;
+    }
+    if(rawText.length()<1||rawText.length()>5) {sendJSON(422,"{\"error\":\"invalid_raw_value\"}");return;}
+    char* end=nullptr;const unsigned long parsed=strtoul(rawText.c_str(),&end,10);
+    if(!end||*end!='\0'||parsed>65535UL) {sendJSON(422,"{\"error\":\"invalid_raw_value\"}");return;}
+    uint16_t runState=0;
+    if(!mb_.readRegister(0x3000,runState)||runState!=3) {
+      sendJSON(409,"{\"error\":\"vfd_stop_not_confirmed\"}");return;
+    }
+    const uint16_t requested=(uint16_t)parsed;
+    uint16_t current=0;
+    if(!mb_.readRegister(parameter->address,current)) {
+      sendJSON(502,"{\"error\":\"current_value_read_failed\"}");return;
+    }
+    if(current==requested) {
+      sendJSON(200,"{\"success\":true,\"changed\":false,\"code\":\""+code+"\",\"raw_value\":"+String(requested)+",\"readback\":"+String(current)+"}");return;
+    }
+    if(!mb_.writeRegister(parameter->address,requested)) {
+      sendJSON(502,"{\"error\":\"vfd_write_failed\",\"detail\":\""+jsonEscape(mb_.lastError())+"\"}");return;
+    }
+    uint16_t readback=0;
+    if(!mb_.readRegister(parameter->address,readback)||readback!=requested) {
+      sendJSON(502,"{\"error\":\"readback_verification_failed\"}");return;
+    }
+    sendJSON(200,"{\"success\":true,\"changed\":true,\"code\":\""+code+"\",\"raw_value\":"+String(requested)+",\"readback\":"+String(readback)+"}");
   });
   server_.onNotFound([&](){server_.send(404,"text/plain","Not Found");});
 }

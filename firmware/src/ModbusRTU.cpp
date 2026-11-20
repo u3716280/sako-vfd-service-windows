@@ -25,7 +25,6 @@ void ModbusRTU::begin(uint32_t baud, const String& format, uint8_t slave) {
 }
 
 bool ModbusRTU::readRegister(uint16_t addr, uint16_t& value) {
-  // READ-ONLY. Only function code 0x03 is implemented in this release.
   const uint8_t reqBase[6]={slave_, 0x03, (uint8_t)(addr>>8),(uint8_t)addr,0x00,0x01};
   uint8_t req[8];
   memcpy(req,reqBase,6);
@@ -58,4 +57,33 @@ bool ModbusRTU::readRegister(uint16_t addr, uint16_t& value) {
   value=((uint16_t)resp[3]<<8)|resp[4];
   error_="ok"; ++successes_;
   return true;
+}
+
+bool ModbusRTU::writeRegister(uint16_t addr, uint16_t value) {
+  const uint8_t reqBase[6]={slave_,0x06,(uint8_t)(addr>>8),(uint8_t)addr,
+                            (uint8_t)(value>>8),(uint8_t)value};
+  uint8_t req[8];memcpy(req,reqBase,6);
+  const uint16_t requestCrc=crc16(req,6);
+  req[6]=(uint8_t)requestCrc;req[7]=(uint8_t)(requestCrc>>8);
+  while(bus_.available()) bus_.read();
+  digitalWrite(RS485_DE_PIN,HIGH);delayMicroseconds(250);
+  const size_t sent=bus_.write(req,sizeof(req));
+  bus_.flush();delayMicroseconds(250);digitalWrite(RS485_DE_PIN,LOW);
+  if(sent!=sizeof(req)) {error_="write_uart_tx_failed";++writeFailures_;return false;}
+
+  uint8_t resp[8];size_t count=0,expected=8;
+  const uint32_t start=millis();
+  while(count<expected && millis()-start<MODBUS_RESPONSE_TIMEOUT_MS) {
+    if(bus_.available()) {
+      resp[count++]=(uint8_t)bus_.read();
+      if(count>=2 && resp[1]==0x86) expected=5;
+    } else delay(1);
+  }
+  if(count!=expected) {error_="write_timeout_or_frame_length";++writeFailures_;return false;}
+  if(resp[0]!=slave_) {error_="write_unexpected_slave";++writeFailures_;return false;}
+  const uint16_t incoming=(uint16_t)resp[expected-2]|((uint16_t)resp[expected-1]<<8);
+  if(crc16(resp,expected-2)!=incoming) {error_="write_crc_mismatch";++writeFailures_;return false;}
+  if(resp[1]==0x86) {error_=String("write_modbus_exception_")+String(resp[2]);++writeFailures_;return false;}
+  if(resp[1]!=0x06 || memcmp(req,resp,6)!=0) {error_="write_echo_mismatch";++writeFailures_;return false;}
+  error_="ok";++writeSuccesses_;return true;
 }

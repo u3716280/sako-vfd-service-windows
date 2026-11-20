@@ -93,7 +93,8 @@ void BackupService::finish() {
   result.print(",\"excluded_non_readable\":");result.print(skipped_);result.print("},");
   result.print("\"parameters\":[");copyContent(sourceValues,result);
   result.print("],\"failed\":[");copyContent(sourceErrors,result);
-  result.print("],\"restore_allowed\":false}");
+  result.print("],\"restore_allowed\":true,");
+  result.print("\"restore_policy\":\"trusted_firmware_index_rw_only_stopped_readback\"}");
   result.flush();const bool fileOk=result.size()>50;
   result.close();sourceValues.close();sourceErrors.close();
   LittleFS.remove("/backup_values.tmp");LittleFS.remove("/backup_errors.tmp");

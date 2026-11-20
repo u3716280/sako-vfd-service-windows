@@ -1,8 +1,8 @@
-# SAKO SKI780 Portable VFD Service Tool — v0.1 Integrated MVP
+# SAKO SKI780 Portable VFD Service Tool — v0.2 Windows Integration
 
 **Hardware:** Waveshare **ESP32-S3-RS485-CAN**, onboard antenna, SKU 32154  
 **Development:** VS Code + PlatformIO / Arduino C++  
-**Purpose:** Temporary field-service tool for **read-only** monitoring, Parameter Library browsing and JSON backup over RS-485 Modbus RTU. **No VFD write command exists in this firmware.**
+**Purpose:** Temporary field-service tool for monitoring, Parameter Library browsing, JSON backup, and guarded RW-only restore from the Windows v0.2 application over RS-485 Modbus RTU. It does not expose motor RUN/STOP control.
 
 ## 1. What's included
 
@@ -15,7 +15,7 @@
 | Backup | Sequential read-only Modbus backup with per-register success/failure, JSON download |
 | Settings | ESP32's own baud, serial format, and slave address stored in Preferences |
 
-**Excluded:** Input Voltage AC (no verified native register), RUN/STOP control, parameter editing, Compare Engine, Restore Engine. The UI never displays invented telemetry.
+**Excluded:** Input Voltage AC (no verified native register) and motor RUN/STOP control. Compare runs in the Windows application. The browser UI remains monitoring/backup oriented.
 
 ## 2. First setup / PlatformIO flash
 
@@ -77,7 +77,7 @@ The sequential backup creates a JSON with `parameters` successful reads, `failed
 
 JSON time is supplied by the browser clock (may be wrong, stored as `created_at_client`); no NTP/Internet is required. Backups are held on ESP32 LittleFS only for download and are **not** a reliable permanent archive: save copies on phone/PC.
 
-**Restore policy for future v0.3:** only RW, with in-firmware trusted definitions and range/state verification. **v0.1 includes no Modbus Write Single Register 0x06.**
+**Restore policy in v0.2:** the Windows app may request one raw backup value at a time. Firmware ignores imported access labels and accepts only RW entries compiled into `ParameterIndex.h`; `REG_*`, RO, WO, Restricted, and Unknown entries are rejected. Before every changed value it reads register 0x3000 and requires STOP=3, reads the current value, writes with Function 0x06 only if different, then reads back with Function 0x03 and requires an exact match. Stop on the first error and keep the original backup. Hardware validation is still required before production use.
 
 ## 6. Service endpoints
 
@@ -93,6 +93,8 @@ JSON time is supplied by the browser clock (may be wrong, stored as `created_at_
 | POST | `/api/backup/cancel` | Cancel backup |
 | GET | `/api/backup/download` | Download latest in-session completed JSON |
 | POST | `/api/settings` | Change ESP32 slave/baud/format **only** |
+| POST | `/api/device` | Save editable device name |
+| POST | `/api/restore/parameter` | Guarded single RW raw-value restore from Windows |
 
 Frontend uses standard Fetch polling, not WebSocket: approximately 1 sec for dashboard and 0.8 sec for backup progress. This avoids external embedded web libraries in v0.1 and works offline.
 
@@ -156,5 +158,9 @@ Version **0.1.0 Integrated MVP source package** — prepared for field commissio
 ## v0.1.2 LAN Wi-Fi mode
 
 Edit `include/WiFiSecrets.h` and add 2.4 GHz router SSID and password; the default empty SSID keeps AP-only mode. After flashing, the Serial Monitor shows `LAN URL: http://192.168.x.x`; reserve this address in the router DHCP settings. A fallback AP `SAKO-Service-v01` at `192.168.4.1` is enabled if no LAN connection is established in 15 s or if the connection remains lost for 20 s. Credentials must not be committed to GitHub; see `.gitignore`. This is a read-only prototype without HTTP authentication: keep it on a trusted local network and do not expose it to the internet. Upload firmware **and** LittleFS image to install the updated Settings UI.
+
+## v0.2.0 Windows integration and Safe Restore
+
+`/api/status` now publishes a stable `product_id`, API version, firmware version, device ID, editable device name, and capabilities. Windows v0.2 can perform native backup, compare files locally, update serial settings, rename the service tool, and request guarded RW-only restore. There is no Device PIN or HTTP authentication, so use only an isolated/trusted LAN and never configure router port forwarding. Safe Restore is not a substitute for commissioning checks: disconnect the motor where appropriate, preserve a known-good backup, verify the VFD display says STOP, and test a small non-critical parameter first.
 
 For Git: `include/WiFiSecrets.h` is gitignored. Copy `include/WiFiSecrets.h.example` to `include/WiFiSecrets.h` after a clean clone.

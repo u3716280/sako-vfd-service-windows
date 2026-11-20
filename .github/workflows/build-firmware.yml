@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           env_name="waveshare_esp32s3_rs485_can"
           build_dir="firmware/.pio/build/${env_name}"
-          output_dir="dist/SAKO-SKI780-ESP32-v0.1.2"
+          output_dir="dist/SAKO-SKI780-ESP32-v0.2.0"
           mkdir -p "${output_dir}"
           cp "${build_dir}/bootloader.bin" "${output_dir}/"
           cp "${build_dir}/partitions.bin" "${output_dir}/"
@@ -64,12 +64,12 @@ jobs:
             sha256sum bootloader.bin partitions.bin firmware.bin littlefs.bin > SHA256SUMS.txt
           )
           cd dist
-          zip -r SAKO-SKI780-ESP32-v0.1.2-build.zip SAKO-SKI780-ESP32-v0.1.2
+          zip -r SAKO-SKI780-ESP32-v0.2.0-build.zip SAKO-SKI780-ESP32-v0.2.0
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SAKO-SKI780-ESP32-v0.1.2-build
-          path: dist/SAKO-SKI780-ESP32-v0.1.2-build.zip
+          name: SAKO-SKI780-ESP32-v0.2.0-build
+          path: dist/SAKO-SKI780-ESP32-v0.2.0-build.zip
           if-no-files-found: error
           retention-days: 30

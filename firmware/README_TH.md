@@ -1,8 +1,8 @@
-# วิธีติดตั้งฉบับย่อ — SAKO SKI780 ESP32 Service Tool v0.1.2
+# วิธีติดตั้งฉบับย่อ — SAKO SKI780 ESP32 Service Tool v0.2.0
 
 **บอร์ดที่ใช้:** Waveshare ESP32-S3-RS485-CAN รุ่นเสาอากาศในตัว (SKU 32154)  
 **โปรแกรมพัฒนา:** VS Code + PlatformIO / Arduino C++  
-**วัตถุประสงค์:** อ่านค่า VFD ผ่าน RS-485 และเปิด Web Server บน ESP32 เพื่อ Monitoring / Parameter Library / JSON Backup โดย **ไม่เขียนค่ากลับ VFD ในรุ่น v0.1.2**
+**วัตถุประสงค์:** Monitoring / Parameter Library / JSON Backup และ Safe Restore ค่า RW จาก Windows v0.2 ผ่าน RS-485 โดยไม่มีคำสั่ง RUN/STOP มอเตอร์
 
 ## ติดตั้งลงบอร์ด
 
@@ -43,7 +43,7 @@
 - Pinout ใน Source ใช้ `GPIO17 TX`, `GPIO18 RX`, `GPIO21 DE` และต้องยืนยันตาม Schematic/Revision จริง
 - ใช้ Register U0 เพื่อคำนวณค่าบน Dashboard ตามค่าความละเอียดจากคู่มือ
 - **Estimated RPM ไม่ใช่รอบจริงที่วัดด้วย Encoder/Tachometer**
-- ยังไม่มี RUN/STOP, Compare หรือ Restore ใน v0.1.2
+- ไม่มีคำสั่ง RUN/STOP; Compare ทำบน Windows และ Restore รับเฉพาะ RW ที่ Firmware เชื่อถือ
 - ฟังก์ชัน Restore ที่จะทำในอนาคตเขียนได้เฉพาะ Access `RW` เมื่อผ่านการตรวจสอบเงื่อนไข
 - Firmware มีเพียง Wi-Fi WPA2 สำหรับการเข้าถึงหน้า Web ในรุ่นนี้ ไม่ควรเปิดสู่เครือข่ายสาธารณะ
 
@@ -56,7 +56,17 @@
 - Startup: try Station (STA) mode for 15 seconds; if unavailable, enable fallback AP `SAKO-Service-v01` at `192.168.4.1` and keep attempting STA reconnect.
 - If STA disconnects during operation for 20 seconds, the firmware enables a fallback AP. If STA later reconnects, both interfaces may remain active until reboot.
 - The Settings page and `/api/status` display `network_mode`, `network_ssid`, and `network_ip`. No Web/Modbus feature changes.
-- **Security:** this firmware has no web-application authentication or HTTPS. When exposed to the LAN, use only a trusted isolated/private LAN. Do not port-forward it onto the public internet. v0.1.2 still NEVER writes Modbus registers.
+- **Security:** Firmware ไม่มี Device PIN, Web Login หรือ HTTPS ให้ใช้เฉพาะ LAN ส่วนตัวที่เชื่อถือได้ และห้ามทำ Port Forward ออก Internet
+
+## Safe Restore v0.2.0
+
+- รับเฉพาะ Parameter ที่ถูก Compile เป็น `RW` ใน Firmware; ไม่เชื่อชนิด Access จาก JSON
+- ปฏิเสธ RO / WO / Restricted / Unknown และ Register กลุ่ม `REG_*`
+- ก่อนทุกค่าต้องอ่านสถานะ VFD ได้ว่า STOP=3
+- อ่านค่าปัจจุบันก่อน ถ้าเท่ากันจะไม่เขียนซ้ำ
+- ค่าที่ต่างจะเขียนด้วย Modbus Function 0x06 และอ่านกลับด้วย 0x03 เพื่อตรวจสอบ
+- หากค่าใดผิดพลาด Windows จะหยุด Restore ทันที
+- ก่อนใช้งานจริงให้เก็บ Backup เดิมและทดลองกับ Parameter ที่ไม่สำคัญก่อน
 - If you edit only `WiFiSecrets.h` and C++, upload **Firmware**; no need to reupload LittleFS. If you also want the updated Settings page, upload **Filesystem Image** too. Keep `partitions.csv` unchanged.
 
 หมายเหตุสำหรับ GitHub: ไฟล์ `include/WiFiSecrets.h` ไม่ถูก commit เพื่อป้องกันข้อมูล Wi-Fi หลุด ให้คัดลอก `include/WiFiSecrets.h.example` เป็น `include/WiFiSecrets.h` หลัง Clone ก่อน Build

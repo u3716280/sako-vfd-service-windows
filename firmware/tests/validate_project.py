@@ -20,8 +20,14 @@ for code,addr,access in entries:
     assert {'RO':0,'RW':1,'WO':2,'Restricted':3,'Unknown':4}[p['access']]==int(access)
 assert (root/'data/library/ski780_parameters.json').stat().st_size<800000
 cpp='\n'.join(x.read_text() for x in (root/'src').glob('*.cpp'))
-assert '0x06' not in (root/'src/ModbusRTU.cpp').read_text(), 'Unexpected Modbus Write function'
-assert '0x03' in (root/'src/ModbusRTU.cpp').read_text()
+modbus=(root/'src/ModbusRTU.cpp').read_text()
+web=(root/'src/WebApp.cpp').read_text()
+assert '0x03' in modbus and '0x06' in modbus
+assert 'not_trusted_rw_parameter' in web
+assert 'vfd_stop_not_confirmed' in web
+assert 'readback_verification_failed' in web
+assert 'parameter->access!=ACCESS_RW' in web
+assert 'REG_' in web, 'command/monitor registers must be excluded from restore'
 html=(root/'data/index.html').read_text()
 js=(root/'data/js/app.js').read_text()
 for target in ['dashboard','parameters','library','backup','settings']:
@@ -31,4 +37,7 @@ for endpoint in ['/api/monitor','/api/status','/api/library','/api/parameter','/
 assert '0x7000,0x7002,0x7003,0x7004' in (root/'src/VfdService.cpp').read_text() or '0x7000,0x7002,0x7003,0x7004' in (root/'include/VfdService.h').read_text()
 assert 'board_build.filesystem = littlefs' in (root/'platformio.ini').read_text()
 assert 'factory' in (root/'partitions.csv').read_text() and 'littlefs' in (root/'partitions.csv').read_text()
-print('PASS library 448, index 445, access counts, 5 UI sections, endpoints, read-only Modbus, LittleFS')
+for endpoint in ['/api/device','/api/restore/parameter']:
+    assert endpoint in web
+assert 'sako-ski780-service-tool' in (root/'include/AppConfig.h').read_text()
+print('PASS library 448, trusted index 445, API identity, backup, safe RW restore guards, LittleFS')

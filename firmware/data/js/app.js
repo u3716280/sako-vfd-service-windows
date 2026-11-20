@@ -1,5 +1,5 @@
 'use strict';
-/* SAKO SKI780 v0.1: browser UI. This release NEVER writes Modbus registers. */
+/* SAKO SKI780 v0.2 browser UI. Writes are exposed only through the guarded Windows restore API. */
 const $ = id => document.getElementById(id);
 const state = { page:'dashboard', library:null, entries:[],filtered:[],pageNo:0,perPage:22,selected:null,settingsLoaded:false,profiles:[],backup:null };
 const pages = {dashboard:'Monitoring Dashboard',parameters:'Parameter Manager',library:'Parameter Library',backup:'JSON Backup',settings:'Settings'};
